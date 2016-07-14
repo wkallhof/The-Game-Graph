@@ -1,6 +1,8 @@
 
 /*
-*
+* GAME GRAPH MAIN
+* main application reference for initializing
+* the graph
 */
 var App = function ($canvas) {
 
@@ -22,16 +24,20 @@ App.constructor = App;
 App.prototype = {
 
   /*
-  *
+  * Handles setup and initialization for the app
   */  
   init: function () {
+    // create the particle system
     this._ps = arbor.ParticleSystem(2000, 600, 0.5);
     this._ps.parameters({ gravity: true });
+
+    // set the particle systems renderer to the same methods
     this._ps.renderer = { init: this._renderer.init.bind(this._renderer), redraw: this._renderer.redraw.bind(this._renderer) };
 
     // call to get the initial player list    
     this._api.getLeaderboard(this._currentLeaderboardPage, this.onGetLeaderboard.bind(this));
 
+    // call the main loop    
     setInterval(this.loop.bind(this), 1000);
   },
 
@@ -47,23 +53,15 @@ App.prototype = {
   * Handle the return from requesting
   * leaderboard data.
   */  
-  onGetLeaderboard : function (data) {
+  onGetLeaderboard: function (data) {
+    // if no data, loading is complete
     if (!data || data.length == 0) {
       this._loadingLeaderboardComplete = true;
       return;
     };
 
     // map players    
-    var players = _.map(data, function (d) {
-      var image = new Image();
-      image.src = d.AvatarUrl;
-
-      return {
-        name: d.PlayerName,
-        image: image,
-        points: d.Points
-      };
-    });
+    var players = _.map(data, this.mapLeaderboardDataToPlayer.bind(this));
 
     // join list
     this._players = _.union(this._players, players);
@@ -71,6 +69,20 @@ App.prototype = {
     // update page and make API call
     this._currentLeaderboardPage++;
     this._api.getLeaderboard(this._currentLeaderboardPage, this.onGetLeaderboard.bind(this));
+  },
+
+  /*
+  * Maps API data to player object
+  */  
+  mapLeaderboardDataToPlayer: function (data) {
+    var image = new Image();
+    image.src = data.AvatarUrl;
+
+    return {
+      name: data.PlayerName,
+      image: image,
+      points: data.Points
+    };
   },
   
   /*
@@ -85,9 +97,11 @@ App.prototype = {
     _.forEach(data, function (effect) {
       var isAttack = effect.Effect != null && effect.Effect.EffectType === "Attack";
 
+      // make sure we don't do this for the same person multiple times      
       if (creatorsDrawn.indexOf(effect.Creator) > -1) return;
       creatorsDrawn.push(effect.Creator);
 
+      // map the creator and targets to nodes      
       var creator = this.addGetNode(effect.Creator);
       var target = this.addGetNode(effect.Targets);
 
@@ -95,6 +109,7 @@ App.prototype = {
       var creatorEdges = this._ps.getEdgesFrom(creator);
       _.forEach(creatorEdges, function (edge) { this._ps.pruneEdge(edge); }.bind(this));
 
+      // if the creator is not the target, draw the edge      
       if (creator.name != target.name)
         this._ps.addEdge(creator, target, { isAttack : isAttack });  
       
@@ -117,6 +132,8 @@ App.prototype = {
   }
 }
 
+
+// Lets start
 $(function () {
   var app = new App($("#viewport"));
 });
