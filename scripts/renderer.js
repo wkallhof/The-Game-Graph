@@ -122,6 +122,14 @@ GameRenderer.prototype = {
         this._ctx.beginPath();
         this._ctx.arc(pt.x, pt.y, 30, 0, 2*Math.PI);
         this._ctx.stroke();
+
+        // draw position
+        this._ctx.fillStyle = REN.FONT_COLOR;
+        this._ctx.strokeStyle = "black";
+        this._ctx.lineWidth = 2;
+        this._ctx.font = REN.FONT_STYLE;
+        this._ctx.strokeText(node.data.rank, pt.x - w / 2, pt.y + w / 2);
+        this._ctx.fillText(node.data.rank, pt.x - w / 2, pt.y + w / 2 );
     },
 
     /*

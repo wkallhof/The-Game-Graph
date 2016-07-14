@@ -11,7 +11,8 @@ var App = function ($canvas) {
   this._api = new GameApi();
   this._currentLeaderboardPage = 0;
   this._loadingLeaderboardComplete = false;
-
+  this._lastEffectDate = 0;
+  
   this._paused = false;
   
   this._players = [];
@@ -28,7 +29,8 @@ App.prototype = {
   */  
   init: function () {
     // create the particle system
-    this._ps = arbor.ParticleSystem(2000, 600, 0.5);
+    // this._ps = arbor.ParticleSystem(2000, 600, 0.5);
+    this._ps = arbor.ParticleSystem(1000, 500, 0.5);
     this._ps.parameters({ gravity: true });
 
     // set the particle systems renderer to the same methods
@@ -46,7 +48,8 @@ App.prototype = {
   */  
   loop : function () {
     if (this._paused || !this._loadingLeaderboardComplete) return;
-    this._api.getEffects(this.onGetEffects.bind(this));     
+    this._api.getEffects(this.onGetEffects.bind(this));
+    this.pruneOldNodes();
   },
 
   /*
@@ -92,9 +95,17 @@ App.prototype = {
   onGetEffects : function (data) {
     if (!data || data.length == 0) return;
 
+    var effects = _.filter(data, function (e) {
+      return Date.parse(e.Timestamp) >= this._lastEffectDate;
+    }.bind(this));
+
     var creatorsDrawn = [];
     
-    _.forEach(data, function (effect) {
+    _.forEach(effects, function (effect) {
+      var date = Date.parse(effect.Timestamp);
+      if (date > this._lastEffectDate)
+        this._lastEffectDate = date;
+      
       var isAttack = effect.Effect != null && effect.Effect.EffectType === "Attack";
 
       // make sure we don't do this for the same person multiple times      
@@ -104,6 +115,10 @@ App.prototype = {
       // map the creator and targets to nodes      
       var creator = this.addGetNode(effect.Creator);
       var target = this.addGetNode(effect.Targets);
+
+      // update the update date for each node if needed
+      if (!creator.data.updateDate || creator.data.updateDate < date) creator.data.updateDate = date;
+      if (!target.data.updateDate || target.data.updateDate < date) target.data.updateDate = date;
 
       // prune the creator edges;      
       var creatorEdges = this._ps.getEdgesFrom(creator);
@@ -128,7 +143,19 @@ App.prototype = {
     var playerMatch = _.find(this._players, { "name": name });
     if (!playerMatch) return;
 
-    return this._ps.addNode(name, { points: playerMatch.points, image: playerMatch.image });
+    return this._ps.addNode(name, { rank: this._players.indexOf(playerMatch) + 1, points: playerMatch.points, image: playerMatch.image });
+  },
+
+  /*
+  * Handles pruning old nodes from the graph. Prevents
+  * old nodes from sticking around.
+  */
+  pruneOldNodes: function () {
+    this._ps.eachNode(function (node) {
+      var lastUpdateDate = node.data.updateDate;
+      if (this._lastEffectDate - lastUpdateDate > 61000)
+        this._ps.pruneNode(node);  
+    }.bind(this));
   }
 }
 
