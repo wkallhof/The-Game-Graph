@@ -39,7 +39,7 @@ GameApi.prototype = {
     * @param url : URL of the API request
     */    
     makeRequest: function (url) {
-        console.log("Request made to : " + url);
+        //console.log("Request made to : " + url);
         return $.get(url);
     }
 };

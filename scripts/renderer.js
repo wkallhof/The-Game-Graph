@@ -21,6 +21,8 @@ var GameRenderer = function ($canvas) {
     this._ps = null;
     
     this._currentNodeFocus = null;
+
+    this._scores = [];
 }
 
 GameRenderer.constructor = GameRenderer;
@@ -81,10 +83,13 @@ GameRenderer.prototype = {
         this._ctx.fillStyle = REN.BACKGROUND_COLOR;
         this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height)
 
+        TWEEN.update();
+        
         // draw 
         this._ps.eachNode(this.drawNode.bind(this));       
         this._ps.eachEdge(this.drawEdge.bind(this));
         this.drawName(this._currentNodeFocus);
+        this.drawScoreItems();
     },
 
     /*
@@ -129,7 +134,7 @@ GameRenderer.prototype = {
         this._ctx.lineWidth = 2;
         this._ctx.font = REN.FONT_STYLE;
         this._ctx.strokeText(node.data.rank, pt.x - w / 2, pt.y + w / 2);
-        this._ctx.fillText(node.data.rank, pt.x - w / 2, pt.y + w / 2 );
+        this._ctx.fillText(node.data.rank, pt.x - w / 2, pt.y + w / 2);
     },
 
     /*
@@ -162,5 +167,60 @@ GameRenderer.prototype = {
         this._ctx.closePath();
         this._ctx.restore();
         this._ctx.stroke();
+    },
+
+    /*
+    * Handles drawing the score tweens
+    */
+    drawScoreItems: function () {
+        for (var i = this._scores.length - 1; i >= 0; i--){
+            var s = this._scores[i];
+            // remove the score if it is complete
+            if (s.complete) {
+                this._scores.splice(i, 1);   
+                continue; 
+            }
+
+            this._ctx.fillStyle = s.points > 0 ? "rgba(92,184,92,"+ s.a +")" : "rgba(217,83,79,"+ s.a +")";
+            this._ctx.strokeStyle = "rgba(0,0,0,"+ s.a +")";
+            this._ctx.lineWidth = 2;
+            this._ctx.font = REN.FONT_STYLE;
+            this._ctx.strokeText(s.points, s.x, s.y);
+            this._ctx.fillText(s.points, s.x, s.y);
+        }
+    },
+
+    /*
+    * Start a score tween
+    */    
+    startScoreTween: function (points, x, y) {
+        var score = {
+            points: points,
+            x: x,
+            y: y,
+            a: 1,
+            complete : false
+        };
+        this._scores.push(score);
+
+        var tween = new TWEEN.Tween(score)
+            .to({ x: x, y: y - 100, a: 0 }, 2000)
+            .onComplete(function (a, b) {
+                this.complete = true;
+            })
+            .start();
+    },
+
+    /*
+    * Add the score effect
+    */    
+    addScoreEffect: function (node, score) {
+        if (!node) return;
+
+        var w = REN.NODE_WIDTH;
+        var pt = this._ps.toScreen(node.p);
+
+        if (!pt) return;        
+        this.startScoreTween(score, pt.x - w / 2, pt.y - w / 2);
     }
 }

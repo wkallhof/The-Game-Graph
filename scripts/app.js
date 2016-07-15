@@ -36,20 +36,32 @@ App.prototype = {
     // set the particle systems renderer to the same methods
     this._ps.renderer = { init: this._renderer.init.bind(this._renderer), redraw: this._renderer.redraw.bind(this._renderer) };
 
-    // call to get the initial player list    
+    // get leaderboard    
     this._api.getLeaderboard(this._currentLeaderboardPage, this.onGetLeaderboard.bind(this));
 
     // call the main loop    
-    setInterval(this.loop.bind(this), 1000);
+    setInterval(this.requestEffectsLoop.bind(this), 1000);
+    setInterval(this.requestNewLeaderboardLoop.bind(this), 10000);
   },
 
   /*
-  * Main app loop
+  * Main effects loop
   */  
-  loop : function () {
+  requestEffectsLoop : function () {
     if (this._paused || !this._loadingLeaderboardComplete) return;
     this._api.getEffects(this.onGetEffects.bind(this));
     this.pruneOldNodes();
+  },
+
+  /*
+  * Main leaderboard loop
+  */  
+  requestNewLeaderboardLoop: function () {
+    this._players = [];
+    this._currentLeaderboardPage = 0;
+    this._loadingLeaderboardComplete = false
+    // call to get the initial player list    
+    this._api.getLeaderboard(this._currentLeaderboardPage, this.onGetLeaderboard.bind(this));
   },
 
   /*
@@ -60,6 +72,7 @@ App.prototype = {
     // if no data, loading is complete
     if (!data || data.length == 0) {
       this._loadingLeaderboardComplete = true;
+      this.updateNodeData();
       return;
     };
 
@@ -93,11 +106,13 @@ App.prototype = {
   * to other nodes
   */
   onGetEffects : function (data) {
-    if (!data || data.length == 0) return;
+    if (!data || data.length == 0 || !this._loadingLeaderboardComplete) return;
 
     var effects = _.filter(data, function (e) {
       return Date.parse(e.Timestamp) >= this._lastEffectDate;
     }.bind(this));
+    
+    if (effects.length <= 0) return;
 
     var creatorsDrawn = [];
     
@@ -107,6 +122,7 @@ App.prototype = {
         this._lastEffectDate = date;
       
       var isAttack = effect.Effect != null && effect.Effect.EffectType === "Attack";
+      var scoreGain = effect.Effect != null && effect.Effect.VoteGain ? effect.Effect.VoteGain : 0;
 
       // make sure we don't do this for the same person multiple times      
       if (creatorsDrawn.indexOf(effect.Creator) > -1) return;
@@ -115,7 +131,7 @@ App.prototype = {
       // map the creator and targets to nodes      
       var creator = this.addGetNode(effect.Creator);
       var target = this.addGetNode(effect.Targets);
-
+      
       // update the update date for each node if needed
       if (!creator.data.updateDate || creator.data.updateDate < date) creator.data.updateDate = date;
       if (!target.data.updateDate || target.data.updateDate < date) target.data.updateDate = date;
@@ -126,7 +142,13 @@ App.prototype = {
 
       // if the creator is not the target, draw the edge      
       if (creator.name != target.name)
-        this._ps.addEdge(creator, target, { isAttack : isAttack });  
+        this._ps.addEdge(creator, target, { isAttack: isAttack });  
+      
+      // Update with score tweens
+      if (target.data.lastScoreGain != scoreGain) {
+        target.data.lastScoreGain = scoreGain;
+        this._renderer.addScoreEffect(target, scoreGain);
+      }
       
     }.bind(this));
   },
@@ -139,11 +161,15 @@ App.prototype = {
   addGetNode: function (name) {
     var node = this._ps.getNode(name);
     if (node) return node;
-
+    
     var playerMatch = _.find(this._players, { "name": name });
     if (!playerMatch) return;
 
-    return this._ps.addNode(name, { rank: this._players.indexOf(playerMatch) + 1, points: playerMatch.points, image: playerMatch.image });
+    return this._ps.addNode(name, {
+      rank: this._players.indexOf(playerMatch) + 1,
+      points: playerMatch.points,
+      image: playerMatch.image
+    });
   },
 
   /*
@@ -153,8 +179,27 @@ App.prototype = {
   pruneOldNodes: function () {
     this._ps.eachNode(function (node) {
       var lastUpdateDate = node.data.updateDate;
-      if (this._lastEffectDate - lastUpdateDate > 61000)
+      if (this._lastEffectDate - lastUpdateDate > 120000)
         this._ps.pruneNode(node);  
+    }.bind(this));
+  },
+
+  /*
+  * Handles updating nodes after the new players
+  * array is updated
+  */  
+  updateNodeData: function () {
+    this._ps.eachNode(function (node) {
+        var playerMatch = _.find(this._players, { "name": node.name });
+        if (!playerMatch) return;
+      
+        var updateDate = node.data.updateDate;
+        node.data = {
+          rank: this._players.indexOf(playerMatch) + 1,
+          points: playerMatch.points,
+          image: playerMatch.image,
+          updateDate : updateDate
+        };
     }.bind(this));
   }
 }
